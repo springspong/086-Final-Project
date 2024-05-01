@@ -621,7 +621,14 @@ pos_space_smalls = imtophat(V, tau_ball);
 neg_space_smalls = imtophat(V_flip, tau_ball);
 
 %not all of the detected too-small features are actually relevant 
-%for example, sharp corners may be slightly rounded but that’s %okay! So plot them to show
+%for example, sharp corners may be slightly rounded but that’s okay! So plot them to show
+% ERROR ERROR ERROR ERROR ERROR RAHHHHHH DOWN BELOW !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%"Error using voxelPlot"
+%"Input must be a 3D matrix in single or double precision."
+%"Error in Testing>small_feature_detection (line )"
+%"voxelPlot(V, 'AxisTight', true, 'Color', [0 0 0.1], 'Transparency', 0.5) %semi transparent plot of all voxels
+%"Error in Testing (line 32)"
+%"error = small_feature_detection(OUTPUTgrid,2)"
 voxelPlot(V, 'AxisTight', true, 'Color', [0 0 0.1], 'Transparency', 0.5) %semi transparent plot of all voxels
 hold on 
 %voxelPlot(pos_space_smalls, 'AxisTight', true, 'Color', [1 0 0], 'Transparency', 0.75)
