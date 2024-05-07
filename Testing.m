@@ -6,8 +6,10 @@ yco = squeeze( stlcoords(:,2,:) )';
 zco = squeeze( stlcoords(:,3,:) )';
 [hpat] = patch(xco,yco,zco,'b');
 axis equal
+
 %Voxelise the STL:
-[OUTPUTgrid] = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
+OUTPUTgrid = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
+OUTPUTgrid = double(OUTPUTgrid)
 %Show the voxelised result:
 figure;
 subplot(1,3,1);
@@ -31,6 +33,7 @@ axis equal tight
 
 error = small_feature_detection(OUTPUTgrid,2)
 rotatedO = rotateVoxelObject(V, axis, angle)
+%disp(OUTPUTgrid)
 
 function [coordVERTICES,varargout] = READ_stl(stlFILENAME,varargin)
 
@@ -611,8 +614,13 @@ end %function
 function [error] = small_feature_detection(V,tau)
 	%Create the flipped version of V to detect negative space thin features
 [x y z] = size(V);
-V_flip = zeros(x, y, z); %creating complementary array
-V_flip(V==0) = 1; %all 0;s are flipped to 1’s, and the 1’s flipped %to 0’s are already taken care of by the default
+%disp([x, y, z])
+V_flip = zeros(x, y, z, 'single'); %creating complementary array
+V_flip(V==0) = 1; %all 0;s are flipped to 1%s, and the 1’s flipped %to 0’s are already taken care of by the default
+% disp(numDim(V))
+% disp(isfloat(V))
+
+voxelPlot(V, 'AxisTight', true, 'Color', [0, 0, 1], 'Transparency', 0.5) %semi transparent plot of all voxels
 
 %top hat transform, which is dilation and then erosion with unit ball scaled by tau, then subtraction from original image
 %hat transform
@@ -621,18 +629,12 @@ pos_space_smalls = imtophat(V, tau_ball);
 neg_space_smalls = imtophat(V_flip, tau_ball);
 
 %not all of the detected too-small features are actually relevant 
-%for example, sharp corners may be slightly rounded but that’s okay! So plot them to show
-% ERROR ERROR ERROR ERROR ERROR RAHHHHHH DOWN BELOW !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%"Error using voxelPlot"
-%"Input must be a 3D matrix in single or double precision."
-%"Error in Testing>small_feature_detection (line )"
-%"voxelPlot(V, 'AxisTight', true, 'Color', [0 0 0.1], 'Transparency', 0.5) %semi transparent plot of all voxels
-%"Error in Testing (line 32)"
-%"error = small_feature_detection(OUTPUTgrid,2)"
-voxelPlot(V, 'AxisTight', true, 'Color', [0 0 0.1], 'Transparency', 0.5) %semi transparent plot of all voxels
+%for example, sharp corners may be slightly rounded but that’s %okay! So plot them to show
+voxelPlot(neg_space_smalls);
 hold on 
-%voxelPlot(pos_space_smalls, 'AxisTight', true, 'Color', [1 0 0], 'Transparency', 0.75)
-%hold on
+
+voxelPlot(pos_space_smalls, 'AxisTight', true, 'Color', [1 0 0], 'Transparency', 0.75)
+hold on
 % voxelPlot(pos_space_smalls, 'AxisTight', true, 'Color', [0 1 0], 'Transparency', 0.75)
 error = pos_space_smalls
 end
