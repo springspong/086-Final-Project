@@ -1,21 +1,30 @@
 
-%Functions we're writing: 
+Testing Code
+OUTPUTgrid = VOXELISE(75,75,75,'SimpleTestCase.stl','xyz');
+OUTPUTgrid = double(OUTPUTgrid);
+%error = small_feature_detection(OUTPUTgrid,2);
+rotated = rotateVoxelObject(OUTPUTgrid, 'z', 45);
+rotated2 = rotateVoxelObject(rotated, 'y', 60);
+Functions We're Writing
+%Functions we're writing/modifying 
 
 %STL_to_Mesh: Christine
 %Input: STL file, resolution (how many voxels to break the object into)
 %Output: voxel object
+
 function [V] = STL_to_Mesh(STLin, resolution)
-	V = VOXELISE(resolution,resolution,resolution,STLin)
+	V = VOXELISE(resolution,resolution,resolution,STLin);
 end 
 
 %Small_feature_detection: June
 %Input: voxelized object O, tolerance of printer
-%Output: Outputs the voxels that are in thin features. Displays any features that are too small (red for positive space features, green for negative space). Integrate so that user can decide if they want to proceed or not after seeing image
-
-function [error] = small_feature_detection(V,tau)
-	%Create the flipped version of V to detect negative space thin features
+%Output: Outputs the voxels that are in thin features. Displays any features that are too small
+%WORKS BUT SMALL CURRENT PROBLEM - can't rlly plot multiple colors w method we chose, not
+%sure if visible enough
+function [error] = small_feature_detection(V,tau)	
+%Create the flipped version of V to detect negative space thin features
 	[x y z] = size(V);
-	V_flip = zeroes(x, y, z); %creating complementary array
+	V_flip = zeros(x, y, z); %creating complementary array
 	V_flip(V==0) = 1; %all 0’s are flipped to 1’s, and the 1’s flipped %to 0’s are already taken care of by the default
 	%top hat transform, which is dilation and then erosion with unit 
 	%ball scaled by tau, then subtraction from original image
@@ -25,18 +34,14 @@ function [error] = small_feature_detection(V,tau)
 	neg_space_smalls = imtophat(V_flip, tau_ball);
 	%not all of the detected too-small features are actually relevant 
 	%for example, sharp corners may be slightly rounded but that’s %okay! So plot them to show
-	voxelPlot(V, 'AxisTight', true, 'Color', [0 0 0.1], 'Transparency', 0.5) %semi transparent plot of all voxels %THIS IS WRONG INPUT FOR SOME REASON
-	hold on 
-	%voxelPlot(pos_space_smalls, ‘AxisTight,’ true, ‘Color’, [1 0 0], ‘Transparency’, 0.75) THIS IS DEF WRONG INPUT
-	%hold on
-	%voxelPlot(pos_space_smalls, ‘AxisTight,’ true, ‘Color’, [0 1 0], ‘Transparency’, 0.75) THIS IS DEF WRONG INPUT
-	error = pos_space_smalls + neg_space_smalls
+    error = pos_space_smalls + neg_space_smalls;
+	error_voxelPlot(V,error); %semi transparent plot of all voxels
 end
 	
-%Rotate: Christine
+%Rotate: Christine & June
 %Input: voxelized object O, name of axis of rotation, angle of rotation
 %Output: new voxelized object that is rotated version of original
-%Pretty simple matrix rotation
+%WORKS
 function rotatedV = rotateVoxelObject(V, axis, angle)
     % Check if the input axis is valid
     if ~ismember(axis, {'x', 'y', 'z'})
@@ -44,19 +49,18 @@ function rotatedV = rotateVoxelObject(V, axis, angle)
     end
     
     % Define the rotation axis for imrotate3
-    if axis == ‘x’
+    if axis == 'x'
         rotAxis = [1, 0, 0];
-    elseif axis == ‘y’
+    elseif axis == 'y'
         rotAxis = [0, 1, 0];
-    Else
+    else
         rotAxis = [0, 0, 1];
     end
 
     % Perform the rotation using imrotate3
     % 'nearest' and 'crop' options are used to avoid changing the size of the matrix and to use nearest neighbor interpolation
-    rotatedV = imrotate3(V, angle, rotAxis, 'nearest', 'crop');
-    voxelPlot(rotateV, 'AxisTight', true, 'Color', [0 0 0.1], 'Transparency', 0.5) %semi transparent plot of all voxels %THIS IS WRONG INPUT FOR SOME REASON
-    hold on 
+    rotatedV = imrotate3(V, angle, rotAxis, 'nearest', 'loose');
+    voxelPlot(rotatedV); 
 end
 
 %Space_of_support: June
@@ -86,10 +90,10 @@ function support = space_of_support(V, thres_angle)
 %Convert the voxel to mesh to turn into STL
 %The isovalue is essentially the contour value or threshold that you wish to impose
 
-function YAML = Voxel_to_YAML_STL(voxel_data, file_name): 
+function YAML = Voxel_to_YAML_STL(voxel_data, file_name) 
 	% DEFINE FILE NAME
-	file_name_yaml = file_name’.yaml';
-	file_name_stl = file_name’.stl’
+	%file_name_yaml = file_name%.yaml';
+	%file_name_stl = file_name%.stl’
 
 	%CONVERT VOXEL TO MESH
 	mesh_data = isosurface(voxelData, 0.5) 
@@ -118,6 +122,158 @@ end
 %Output: YMAL with FEA stuff
 %For now output the bare voxel data and the bare mesh data corresponding to the STL
 
+function error_voxelPlot(mat, error_mat, varargin) %June modified to plot original object with the small feature errors
+%VOXELPLOT 3D plot of voxels in a binary matrix.
+%
+% DESCRIPTION:
+%     voxelPlot produces a 3D plot of a binary matrix, where filled voxels
+%     are displayed at the positions of the 1's. The colormap,
+%     transparency, and axis limits can be controlled through optional
+%     inputs. The input matrix must be in single or double precision.
+%
+%     Examples:
+%         voxelPlot(makeBall(30, 30, 30, 15, 15, 15, 12));
+%         voxelPlot(makeBall(20, 20, 20, 10, 10, 10, 4), 'AxisTight', true, 'Color', [1 0 0], 'Transparency', 0.5);
+%
+% USAGE:
+%     voxelPlot(mat)
+%     voxelPlot(mat, ...)
+%
+% INPUTS:
+%     mat         - input 3D matrix in single or double precision
+%
+% OPTIONAL INPUTS:
+%     Optional 'string', value pairs that may be used to modify the default
+%     computational settings. 
+%
+%     'AxisTight' - Boolean controlling whether axis limits are set to
+%                   only display the filled voxels (default = false).
+%     'Color'     - Three element array specifying rgb color (default =
+%                   [1, 1, 0.4]).
+%     'Transparency' 
+%                 - value between 0 and 1 specifying transparency where 1
+%                   gives no transparency (default = 0.8) 
+%
+% ABOUT:
+%     author      - Bradley Treeby
+%     date        - 3rd September 2009
+%     last update - 7th June 2017
+%
+%     voxelPlot calls the function image3Ddata by Kevin Moerman from
+%     MATLAB central (available from http://www.mathworks.com/...
+%     matlabcentral/fileexchange/24081-image3ddata). image3Ddata is
+%     redistributed with k-Wave under the terms of the BSD license. 
+%
+% This function is part of the k-Wave Toolbox (http://www.k-wave.org)
+% Copyright (C) 2009-2017 Bradley Treeby
+%
+% See also patch
+
+% This file is part of k-Wave. k-Wave is free software: you can
+% redistribute it and/or modify it under the terms of the GNU Lesser
+% General Public License as published by the Free Software Foundation,
+% either version 3 of the License, or (at your option) any later version.
+% 
+% k-Wave is distributed in the hope that it will be useful, but WITHOUT ANY
+% WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+% FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+% more details. 
+% 
+% You should have received a copy of the GNU Lesser General Public License
+% along with k-Wave. If not, see <http://www.gnu.org/licenses/>.
+
+% check input matrix is 3D and single or double precision
+if numDim(mat) ~= 3 || ~isfloat(mat)
+    error('Input must be a 3D matrix in single or double precision.');
+end
+
+% set literals
+num_req_input_variables = 2;
+transparency = 0.25;
+axis_tight = false;
+color_map = [1, 0, 0];    % red
+error_transparency = 1; % default to solid 
+%error_color = [1, 0, 0]; % default to red
+
+
+% replace with user defined values if provided
+if nargin < num_req_input_variables
+    error('Incorrect number of inputs.');
+elseif rem(nargin - num_req_input_variables, 2)
+    error('Optional input parameters must be given as param, value pairs.');    
+elseif ~isempty(varargin)
+    for input_index = 1:2:length(varargin)
+        switch varargin{input_index}
+            case 'AxisTight'
+                axis_tight = varargin{input_index + 1}; 
+            case 'Error Color'
+                error_color = varargin{input_index + 1};                 
+            case 'Transparency'
+               error_transparency = varargin{input_index + 1};
+            otherwise
+                error('Unknown optional input.');
+        end
+    end
+end
+% scale to a max of 1
+mat = mat ./ max(mat(:));
+error_mat = error_mat ./ max(error_mat(:));
+
+% create structure array containing coordinate and colour data for 3D image
+[IMAGE_3D_DATA] = image3Ddata(mat);  
+[ERROR_IMAGE_3D_DATA] = image3Ddata(error_mat);  
+
+% threshold and select the voxels to display 
+%object
+voxel_num = (mat == 1);  
+voxel_face_num = IMAGE_3D_DATA.voxel_patch_face_numbers(voxel_num, :);  
+M_faces = IMAGE_3D_DATA.voxel_patch_faces(voxel_face_num, :);  
+M_vertices = IMAGE_3D_DATA.corner_coordinates_columns_XYZ;  
+%small features
+error_voxel_num = (error_mat == 1);  
+error_voxel_face_num = ERROR_IMAGE_3D_DATA.voxel_patch_face_numbers(error_voxel_num, :);  
+error_M_faces = ERROR_IMAGE_3D_DATA.voxel_patch_faces(error_voxel_face_num, :);  
+error_M_vertices = ERROR_IMAGE_3D_DATA.corner_coordinates_columns_XYZ;  
+
+% create a new figure with a white background
+fig = figure;
+set(fig, 'Color', [1, 1, 1]); 
+
+% plot the voxels using patch
+hp2 = patch('Faces', M_faces, 'Vertices', M_vertices, 'EdgeColor', ...
+    'black', 'CData', IMAGE_3D_DATA.voxel_patch_CData(voxel_face_num,:), ...
+    'FaceColor', 'flat');  
+hold on 
+err = patch('Faces', error_M_faces, 'Vertices', error_M_vertices, 'EdgeColor', ...
+    'black', 'CData', ERROR_IMAGE_3D_DATA.voxel_patch_CData(error_voxel_face_num,:), ...
+    'FaceColor', 'flat'); 
+
+% set the tranparency
+set(hp2, 'FaceAlpha', transparency);
+set(err, 'FaceAlpha', error_transparency);
+
+% set the axes properties and colormap
+view(45, 30); 
+axis equal;
+box on;
+colormap(color_map); %same color
+caxis([0, 1]); 
+grid on;  
+
+% add the axes labels
+xlabel('y [voxels]');
+ylabel('x [voxels]');
+zlabel('z [voxels]');
+
+% force the display to be the same size as mat
+if ~axis_tight
+    sz = size(mat);
+    set(gca, 'XLim', [0.5, sz(2) + 0.5], ...
+             'YLim', [0.5, sz(1) + 0.5], ...
+             'ZLim', [0.5, sz(3) + 0.5]);
+end
+end
+Functions Given
 %Existing functions we’re borrowing:
 
 %Voxelizing
@@ -959,7 +1115,121 @@ if countCORRECTIONLIST>0
  end %if
 %disp([' Ray tracing result: ',num2str(countCORRECTIONLIST),' rays (',num2str(countCORRECTIONLIST/(voxcountX*voxcountY)*100,'%5.1f'),'% of all rays) exactly crossed a facet edge and had to be computed by interpolation.'])
 end %function
-%==========================================================================
 
-%Plotting Voxels
-    
+function [IMAGE_3D_DATA] = image3Ddata(M)
+% function [IMAGE_3D_DATA]=image3Ddata(M)
+% ------------------------------------------------------------------------
+% 
+% This simple function creates a structure array containing coordinate and
+% colour data for 3D images. It allows one to use the patch function to
+% plot the whole image or a selection of voxels in 3D.
+%
+% N.B. The function has not been optimised for large images. Large images
+% (function has been tested for images under 100x100x100) may produce
+% memory problems. 
+%
+%
+% EXAMPLE
+%
+% M = rand(15,15,15);
+% [IMAGE_3D_DATA] = image3D(M);
+% 
+% Getting faces and vertices for full image:
+% voxel_no=1:1:numel(M);
+% voxel_face_no=IMAGE_3D_DATA.voxel_patch_face_numbers(voxel_no,:);
+% M_faces=IMAGE_3D_DATA.voxel_patch_faces(voxel_face_no,:);
+% M_vertices=IMAGE_3D_DATA.corner_coordinates_columns_XYZ;
+% 
+% Getting faces and vertices for selection of voxels:
+% voxel_no2=M>0.95;
+% voxel_face_no2=IMAGE_3D_DATA.voxel_patch_face_numbers(voxel_no2,:);
+% M_faces2=IMAGE_3D_DATA.voxel_patch_faces(voxel_face_no2,:);
+% M_vertices2=IMAGE_3D_DATA.corner_coordinates_columns_XYZ;
+% 
+% figure;fig=gcf; clf(fig); colordef (fig, 'white'); units=get(fig,'units'); set(fig,'units','normalized','outerposition',[0 0 1 1]); set(fig,'units',units);
+% set(fig,'Color',[1 1 1]);
+% 
+% subplot(1,2,1);
+% hp=patch('Faces',M_faces,'Vertices',M_vertices,'EdgeColor','black', 'CData',IMAGE_3D_DATA.voxel_patch_CData(voxel_face_no,:),'FaceColor','flat');
+% hold on; view(45,30); axis equal; axis tight; colormap jet; colorbar; caxis([0 1]);
+% xlabel('J'); ylabel('I'); zlabel('K');
+% title('Full image');
+% 
+% subplot(1,2,2);
+% hp2=patch('Faces',M_faces2,'Vertices',M_vertices2,'EdgeColor','black', 'CData',IMAGE_3D_DATA.voxel_patch_CData(voxel_face_no2,:),'FaceColor','flat');
+% hold on; view(45,30); axis equal; axis tight; colormap jet; colorbar; caxis([0 1]); grid on;
+% set(hp2,'FaceAlpha',0.8); 
+% xlabel('J'); ylabel('I'); zlabel('K');
+% title('Selection of voxels');
+%
+%
+% Kevin Mattheus Moerman
+% kevinmoerman@hotmail.com
+% 11/05/2009
+% ------------------------------------------------------------------------
+% Copyright (c) 2009, Kevin Mattheus Moerman
+% All rights reserved.
+% 
+% Redistribution and use in source and binary forms, with or without 
+% modification, are permitted provided that the following conditions are 
+% met:
+% 
+%     * Redistributions of source code must retain the above copyright 
+%       notice, this list of conditions and the following disclaimer.
+%     * Redistributions in binary form must reproduce the above copyright 
+%       notice, this list of conditions and the following disclaimer in 
+%       the documentation and/or other materials provided with the distribution
+%       
+% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
+% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+% POSSIBILITY OF SUCH DAMAGE.
+% Setting up meshgrid of voxel centre coordinates
+[X,Y,Z] = meshgrid(1:1:size(M,2),1:1:size(M,1),1:1:size(M,3));
+IMAGE_3D_DATA.center_coordinates_meshgrid_X=X;
+IMAGE_3D_DATA.center_coordinates_meshgrid_Y=Y;
+IMAGE_3D_DATA.center_coordinates_meshgrid_Z=Z;
+X=X(:); Y=Y(:); Z=Z(:);
+IMAGE_3D_DATA.center_coordinates_columns_XYZ=[X Y Z];
+% Creating coordinates for voxel corners
+[X,Y,Z] = meshgrid(0.5:1:(size(M,2)+0.5),0.5:1:(size(M,1)+0.5),0.5:1:(size(M,3)+0.5));             
+             
+IMAGE_3D_DATA.corner_coordinates_meshgrid_X=X;
+IMAGE_3D_DATA.corner_coordinates_meshgrid_Y=Y;
+IMAGE_3D_DATA.corner_coordinates_meshgrid_Z=Z;
+X=X(:); Y=Y(:); Z=Z(:);
+IMAGE_3D_DATA.corner_coordinates_columns_XYZ=[X Y Z];
+clear X Y Z;
+% Creating path face and color data
+nodes_first_voxel = [    1 ...
+                         2 ...
+                        ( ( (size(M,1)+1)*(size(M,2)+1) ) +2) ...
+                        ( ( (size(M,1)+1)*(size(M,2)+1) ) +1) ...
+                        ( 1 + (size(M,1)+1) ) ...
+                        ( 2 + (size(M,1)+1) ) ...
+                        ( 2 + (size(M,1)+1) + ( (size(M,1)+1)*(size(M,2)+1) ) ) ...
+                        ( 1 + (size(M,1)+1) + ( (size(M,1)+1)*(size(M,2)+1) ) )   ];
+nodes_first_row_voxels=((0:1:(size(M,1)-1))' * ones(1,8)) + (ones(1,size(M,1))') * nodes_first_voxel;
+A = repmat(nodes_first_row_voxels,(size(M,2)),1);
+B = repmat(((size(M,1)+1)*(0:(size(M,2)-1))),(size(M,1)),1);
+B = reshape(B,1, numel(B))' *ones(1,8);
+nodes_first_slice_voxels=A+B;
+A = repmat(nodes_first_slice_voxels,(size(M,3)),1);
+B = repmat((((size(M,1)+1)*(size(M,2)+1))*(0:(size(M,3)-1))),((size(M,1))*(size(M,2))),1);
+B = reshape(B,1,numel(B))'*ones(1,8);
+IMAGE_3D_DATA.corner_numbers=A+B;
+IMAGE_3D_DATA.voxel_patch_face_numbers=reshape(1:1:(6*numel(M)),6,numel(M))';
+IMAGE_3D_DATA.voxel_patch_CData=reshape(((M(:)*ones(1,6)))',(6*numel(M)),1);
+face_no=[1 2 3 4;1 2 6 5;2 3 7 6;3 4 8 7;1 4 8 5;5 6 7 8]';
+faces=reshape((IMAGE_3D_DATA.corner_numbers(:,face_no))',4,[])';
+IMAGE_3D_DATA.voxel_patch_faces=faces;
+end
+
+%==========================================================================
