@@ -3,8 +3,8 @@ Testing Code
 OUTPUTgrid = VOXELISE(75,75,75,'SimpleTestCase.stl','xyz');
 OUTPUTgrid = double(OUTPUTgrid);
 %error = small_feature_detection(OUTPUTgrid,2);
-rotated = rotateVoxelObject(OUTPUTgrid, 'z', 45);
-rotated2 = rotateVoxelObject(rotated, 'y', 60);
+rotated1 = rotateVoxelObject(OUTPUTgrid, 45, [0 0 2], true);
+rotated2 = rotateVoxelObject(rotated, 60, [0 1 0], true);
 Functions We're Writing
 %Functions we're writing/modifying 
 
@@ -39,28 +39,14 @@ function [error] = small_feature_detection(V,tau)
 end
 	
 %Rotate: Christine & June
-%Input: voxelized object O, name of axis of rotation, angle of rotation
+%Input: voxelized object V, angle of rotation, axis of rotation, boolean deciding whether to plot
 %Output: new voxelized object that is rotated version of original
 %WORKS
-function rotatedV = rotateVoxelObject(V, axis, angle)
-    % Check if the input axis is valid
-    if ~ismember(axis, {'x', 'y', 'z'})
-        error('Invalid rotation axis. Use ''x'', ''y'', or ''z''.');
+function rotated = rotateVoxelObject(V, angle, axis, plot_on)
+    rotated = imrotate3(V, angle, axis, 'nearest', 'loose');
+    if plot_on
+        voxelPlot(rotated); 
     end
-    
-    % Define the rotation axis for imrotate3
-    if axis == 'x'
-        rotAxis = [1, 0, 0];
-    elseif axis == 'y'
-        rotAxis = [0, 1, 0];
-    else
-        rotAxis = [0, 0, 1];
-    end
-
-    % Perform the rotation using imrotate3
-    % 'nearest' and 'crop' options are used to avoid changing the size of the matrix and to use nearest neighbor interpolation
-    rotatedV = imrotate3(V, angle, rotAxis, 'nearest', 'loose');
-    voxelPlot(rotatedV); 
 end
 
 %Space_of_support: June
@@ -121,6 +107,32 @@ end
 %Input: STL
 %Output: YMAL with FEA stuff
 %For now output the bare voxel data and the bare mesh data corresponding to the STL
+
+function [optimalAngle, optimalAxis] = optimized_rotation(V, ig)
+    %ig is initial guess. [angle, axis(1), axis(2), axis(3)]
+    %optimizing rotation to minimize space of support (do not plot the rotation)
+    objFun = @(V) space_of_support(rotatedVoxelObject(V, ig(1), [ig(2) ig(3) ig(4)], false), 135);
+
+    % Define the problem domain
+    nvars = 4; % Number of variables (x and y)
+    %NOT SURE ABOUT THESE BOUNDS
+    lb = [360 1 1 1]; % Lower bounds for x and y
+    ub = [-360 -1 -1 -1]; % Upper bounds for x and y
+
+    % Genetic algorithm options. Kind of arbitrary rn
+    options = optimoptions('ga', 'PopulationSize', 10, 'MaxGenerations', 50);
+
+    % Run the genetic algorithm
+    %CONSIDER ADDING MORE CONSTRAINTS
+    [optimalVars, fval] = ga(objFun, nvars, [], [], [], [], lb, ub, [], options);
+
+    % Extract the optimal angle and axis
+    optimalAngle = optimalVars(1);
+    optimalAxis = [optimalVars(2) optimalVars(3) optimalVars(4)];
+    optimalV = rotatedVoxelObject(V, optimalAngle, optimalAxis, true); %plot the final optimal orientation
+end 
+
+
 
 function error_voxelPlot(mat, error_mat, varargin) %June modified to plot original object with the small feature errors
 %VOXELPLOT 3D plot of voxels in a binary matrix.
@@ -1233,3 +1245,5 @@ IMAGE_3D_DATA.voxel_patch_faces=faces;
 end
 
 %==========================================================================
+ 
+
