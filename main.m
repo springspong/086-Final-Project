@@ -1,18 +1,21 @@
 
 Testing Code
 %Simple Test
-Simple_Test = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
-Simple_Test = double(Simple_Test);
+%Simple_Test = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
+%Simple_Test = double(Simple_Test);
 %error = small_feature_detection(OUTPUTgrid,2);
-support1 = space_of_support(Simple_Test,135)
-rotated1 = rotateVoxelObject(Simple_Test, 45, [0 0 2], false);
-rotated2 = rotateVoxelObject(rotated1, 60, [0 1 0], false);
-support1 = space_of_support(rotated2, 135)
+%support1 = space_of_support(Simple_Test,135)
+%rotated1 = rotateVoxelObject(Simple_Test, 45, [0 0 2], false);
+%rotated2 = rotateVoxelObject(rotated1, 60, [0 1 0], false);
+%support1 = space_of_support(rotated2, 135)
+%[optimalSimple_Test, optimalAngle, optimalAxis] = optimized_rotation(Simple_Test)
 
 %Pikachu
-%Pikachu = VOXELISE(60, 47, 20,'Pikachu.STL','xyz'); %each mm is 1 voxel
-%Pikachu = double(Pikachu);
+Pikachu = VOXELISE(29, 47, 60,'Pikachu.STL','xyz'); %each mm is 1 voxel
+Pikachu = double(Pikachu);
 %voxelPlot(Pikachu);
+new_Pik = rotateVoxelObject(Pikachu, 90, [0 1 0], true);
+[optimal_Pik, optimal_Pik_Angle, optimal_Axis] = optimized_rotation(new_Pik)
 
 %Kirby
 %Kirby = VOXELISE(72, 120, 72, 'Kirby.STL', 'xyz'); %he's 25 by 18 by 18. so each 0.25 mm is a voxel
@@ -23,10 +26,10 @@ support1 = space_of_support(rotated2, 135)
 %very long curvature so feature alr removed by voxelization
 
 %Porcupine
-Porcupine = VOXELISE(94, 94, 143,'Porcupine.STL', 'xyz'); %1 mm per voxel 
-Porcupine = double(Porcupine);
+%Porcupine = VOXELISE(94, 94, 143,'Porcupine.STL', 'xyz'); %1 mm per voxel 
+%Porcupine = double(Porcupine);
 %voxelPlot(Porcupine, 'Color', [0 0 1]);
-error = small_feature_detection(Porcupine,2);
+%error = small_feature_detection(Porcupine,2);
 Functions We're Writing
 %Functions we're writing/modifying 
 
@@ -37,10 +40,6 @@ Functions We're Writing
 function [V] = STL_to_Mesh(STLin, resolution)
 	V = VOXELISE(resolution,resolution,resolution,STLin);
 end 
-
-%Voxel_numbers: June
-%Input: STL file
-%Output: x, y, and z number of voxels to split the part into 
 
 %Small_feature_detection: June
 %Input: voxelized object V, tolerance of printer tau (this is dependent on
@@ -77,6 +76,25 @@ function rotated = rotateVoxelObject(V, angle, axis, plot_on)
     end
 end
 
+%volume_under_triangle: June
+%Input: 3 points in 3D space
+%Output: volume under those points (from z = 0)
+function [volume_under] = volume_under_triangle(corner1, corner2, corner3)
+    x1 = corner1(1);
+    x2 = corner2(1);
+    x3 = corner3(1);
+    y1 = corner1(2);
+    y2 = corner2(2);
+    y3 = corner3(2);
+    z1 = corner1(3);
+    z2 = corner2(3);
+    z3 = corner3(3);
+    
+    z_avg = (z1 + z2 + z3)/3;
+    projected_area = ((x1*y2 - x2*y1) + (x2*y3 - x3*y2) + (x3*y1 - x1*y3))/2;
+    volume_under = abs(projected_area*z_avg);
+end
+
 %Space_of_support: June
 %Input: voxelized object in orientation we are trying to print, threshold
 %angle for what needs to support (usually 135 degrees)
@@ -97,7 +115,35 @@ function support = space_of_support(V, thres_angle)
 	end
 	support = total_vol_under;
  end
-			
+
+%optimized_rotation: June
+%Input: V voxel object
+%Output: V rotated to optimal orientation to minimize support material needed. 
+%Also plots the rotated version of V
+function [optimalV, optimalAngle, optimalAxis] = optimized_rotation(V)
+    %ig is initial guess. [angle, axis(1), axis(2), axis(3)]
+    %optimizing rotation to minimize space of support (do not plot the rotation)
+    objFun = @(rot) space_of_support(rotateVoxelObject(V, rot(1), [rot(2) rot(3) rot(4)], false), 135);
+
+    % Define the problem domain
+    nvars = 4; % Number of variables (x and y)
+    %NOT SURE ABOUT THESE BOUNDS
+    lb = [-360 -1 -1 -1]; % Lower bounds for x and y
+    ub = [360 1 1 1]; % Upper bounds for x and y
+
+    % Genetic algorithm options. Kind of arbitrary rn
+    options = optimoptions('ga', 'PopulationSize', 25, 'MaxGenerations', 75);
+
+    % Run the genetic algorithm
+    %CONSIDER ADDING MORE CONSTRAINTS
+    [optimalVars, fval] = ga(objFun, nvars, [], [], [], [], lb, ub, [], options);
+
+    % Extract the optimal angle and axis
+    optimalAngle = optimalVars(1);
+    optimalAxis = normalize([optimalVars(2) optimalVars(3) optimalVars(4)]);
+    optimalV = rotateVoxelObject(V, optimalAngle, optimalAxis, true); %plot the final optimal orientation
+end 
+
 %Voxel_to_STL: Spring
 %Input: voxel object
 %Output: STL file 
@@ -129,34 +175,6 @@ function YAML = Voxel_to_YAML_STL(voxel_data, file_name)
 	% WRITE TO STL
 	stlwrite(fie_name_stl, mesh_data); % Export mesh to STL file
 end
-
-%optimized_rotation: June
-%Input: V voxel object
-%Output: V rotated to optimal orientation to minimize support material needed. 
-%Also plots the rotated version of V
-function [optimalV] = optimized_rotation(V)
-    %ig is initial guess. [angle, axis(1), axis(2), axis(3)]
-    %optimizing rotation to minimize space of support (do not plot the rotation)
-    objFun = @(rot) space_of_support(rotatedVoxelObject(V, rot(1), [rot(2) rot(3) rot(4)], false), 135);
-
-    % Define the problem domain
-    nvars = 4; % Number of variables (x and y)
-    %NOT SURE ABOUT THESE BOUNDS
-    lb = [360 1 1 1]; % Lower bounds for x and y
-    ub = [-360 -1 -1 -1]; % Upper bounds for x and y
-
-    % Genetic algorithm options. Kind of arbitrary rn
-    options = optimoptions('ga', 'PopulationSize', 10, 'MaxGenerations', 50);
-
-    % Run the genetic algorithm
-    %CONSIDER ADDING MORE CONSTRAINTS
-    [optimalVars, fval] = ga(objFun, nvars, [], [], [], [], lb, ub, [], options);
-
-    % Extract the optimal angle and axis
-    optimalAngle = optimalVars(1);
-    optimalAxis = [optimalVars(2) optimalVars(3) optimalVars(4)];
-    optimalV = rotatedVoxelObject(V, optimalAngle, optimalAxis, true); %plot the final optimal orientation
-end 
 
 function error_voxelPlot(mat, error_mat, varargin) %June modified to plot original object with the small feature errors
 %VOXELPLOT 3D plot of voxels in a binary matrix.
@@ -308,25 +326,6 @@ if ~axis_tight
              'YLim', [0.5, sz(1) + 0.5], ...
              'ZLim', [0.5, sz(3) + 0.5]);
 end
-end
-
-%volume_under_triangle: June
-%Input: 3 points in 3D space
-%Output: volume under those points (from z = 0)
-function [volume_under] = volume_under_triangle(corner1, corner2, corner3)
-    x1 = corner1(1);
-    x2 = corner2(1);
-    x3 = corner3(1);
-    y1 = corner1(2);
-    y2 = corner2(2);
-    y3 = corner3(2);
-    z1 = corner1(3);
-    z2 = corner2(3);
-    z3 = corner3(3);
-    
-    z_avg = (z1 + z2 + z3)/3;
-    projected_area = ((x1*y2 - x2*y1) + (x2*y3 - x3*y2) + (x3*y1 - x1*y3))/2;
-    volume_under = abs(projected_area*z_avg);
 end
 
 
@@ -1485,4 +1484,3 @@ end
 
 %==========================================================================
  
-
