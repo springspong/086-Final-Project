@@ -1,24 +1,51 @@
 
 Testing Code
-OUTPUTgrid = VOXELISE(75,75,75,'SimpleTestCase.stl','xyz');
-OUTPUTgrid = double(OUTPUTgrid);
+%Simple Test
+%Simple_Test = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
+%Simple_Test = double(Simple_Test);
 %error = small_feature_detection(OUTPUTgrid,2);
-rotated1 = rotateVoxelObject(OUTPUTgrid, 45, [0 0 2], true);
-rotated2 = rotateVoxelObject(rotated, 60, [0 1 0], true);
+%support1 = space_of_support(Simple_Test,135)
+%rotated1 = rotateVoxelObject(Simple_Test, 45, [0 0 2], false);
+%rotated2 = rotateVoxelObject(rotated1, 60, [0 1 0], false);
+%support1 = space_of_support(rotated2, 135)
+%[optimalSimple_Test, optimalAngle, optimalAxis] = optimized_rotation(Simple_Test)
+
+%Pikachu
+Pikachu = VOXELISE(29, 47, 60,'Pikachu.STL','xyz'); %each mm is 1 voxel
+Pikachu = double(Pikachu);
+%voxelPlot(Pikachu);
+new_Pik = rotateVoxelObject(Pikachu, 90, [0 1 0], true);
+[optimal_Pik, optimal_Pik_Angle, optimal_Axis] = optimized_rotation(new_Pik)
+
+%Kirby
+%Kirby = VOXELISE(72, 120, 72, 'Kirby.STL', 'xyz'); %he's 25 by 18 by 18. so each 0.25 mm is a voxel
+%Kirby = double(Kirby);
+%voxelPlot(Kirby, 'Color', [1 0.7 0.7]);
+%error = small_feature_detection(Kirby,2); note that there's 'cropped'
+%looking parts that have errors- it's because of the low resolution and
+%very long curvature so feature alr removed by voxelization
+
+%Porcupine
+%Porcupine = VOXELISE(94, 94, 143,'Porcupine.STL', 'xyz'); %1 mm per voxel 
+%Porcupine = double(Porcupine);
+%voxelPlot(Porcupine, 'Color', [0 0 1]);
+%error = small_feature_detection(Porcupine,2);
 Functions We're Writing
 %Functions we're writing/modifying 
 
 %STL_to_Mesh: Christine
 %Input: STL file, resolution (how many voxels to break the object into)
-%Output: voxel object
+%Output: V voxel object
 
 function [V] = STL_to_Mesh(STLin, resolution)
 	V = VOXELISE(resolution,resolution,resolution,STLin);
 end 
 
 %Small_feature_detection: June
-%Input: voxelized object O, tolerance of printer
-%Output: Outputs the voxels that are in thin features. Displays any features that are too small
+%Input: voxelized object V, tolerance of printer tau (this is dependent on
+%resolution of voxels and size of part tho)
+%Output: Outputs the voxels that are in thin features. Plots any features
+%that are too small for user to evaluate
 %WORKS BUT SMALL CURRENT PROBLEM - can't rlly plot multiple colors w method we chose, not
 %sure if visible enough
 function [error] = small_feature_detection(V,tau)	
@@ -49,33 +76,79 @@ function rotated = rotateVoxelObject(V, angle, axis, plot_on)
     end
 end
 
+%volume_under_triangle: June
+%Input: 3 points in 3D space
+%Output: volume under those points (from z = 0)
+function [volume_under] = volume_under_triangle(corner1, corner2, corner3)
+    x1 = corner1(1);
+    x2 = corner2(1);
+    x3 = corner3(1);
+    y1 = corner1(2);
+    y2 = corner2(2);
+    y3 = corner3(2);
+    z1 = corner1(3);
+    z2 = corner2(3);
+    z3 = corner3(3);
+    
+    z_avg = (z1 + z2 + z3)/3;
+    projected_area = ((x1*y2 - x2*y1) + (x2*y3 - x3*y2) + (x3*y1 - x1*y3))/2;
+    volume_under = abs(projected_area*z_avg);
+end
+
 %Space_of_support: June
-%Input: voxelized object in orientation we are trying to print
+%Input: voxelized object in orientation we are trying to print, threshold
+%angle for what needs to support (usually 135 degrees)
 %Output: space that support material would take up (bounding volume it occupies, just assume takes up full space for comparison purposes) 
 %Use the math from Will it Print- normal vector nf of each facet of interest (checking multiple facets). The build vector B is perp to the build plate (orthogonal to layers). 𝛉 is the angle between them, for FDM support material is needed beneath a certain facet if its 𝛉 is greater than some threshold, usually 135 degrees. Find vol under
-
 function support = space_of_support(V, thres_angle)
 	meshdataIN = isosurface(V); %not sure if this is correct
-	[coordNORMALS] = COMPUTE_mesh_normals(meshdataIN);
-	build_dir = [0 0 1] %normal vector to build plate
-	count = 1
+	[coordNORMALS] = COMPUTE_mesh_normals_with_vol(meshdataIN); %each row reps a facet, with 3 columns
+	build_dir = [0 0 1]; %normal vector to build plate
+	total_vol_under = 0;
 	[r c] = size(coordNORMALS);
 	for i = 1:r
-		norm_vector = coordNORMALS(i,:);
-		theta = atan2(norm(cross(norm_vector,build_dir)), dot(norm_vector,build_dir));
-		if theta >= thres_angle
-			count = count + 1;
+		norm_vector = coordNORMALS(i,1:3);
+		theta = rad2deg(atan2(norm(cross(norm_vector,build_dir)), dot(norm_vector, build_dir))); %lin alg!
+		if theta >= thres_angle %consider negatives. 
+			total_vol_under = total_vol_under + coordNORMALS(i,4);
 		end 
 	end
-	support = count
+	support = total_vol_under;
  end
-			
+
+%optimized_rotation: June
+%Input: V voxel object
+%Output: V rotated to optimal orientation to minimize support material needed. 
+%Also plots the rotated version of V
+function [optimalV, optimalAngle, optimalAxis] = optimized_rotation(V)
+    %ig is initial guess. [angle, axis(1), axis(2), axis(3)]
+    %optimizing rotation to minimize space of support (do not plot the rotation)
+    objFun = @(rot) space_of_support(rotateVoxelObject(V, rot(1), [rot(2) rot(3) rot(4)], false), 135);
+
+    % Define the problem domain
+    nvars = 4; % Number of variables (x and y)
+    %NOT SURE ABOUT THESE BOUNDS
+    lb = [-360 -1 -1 -1]; % Lower bounds for x and y
+    ub = [360 1 1 1]; % Upper bounds for x and y
+
+    % Genetic algorithm options. Kind of arbitrary rn
+    options = optimoptions('ga', 'PopulationSize', 25, 'MaxGenerations', 75);
+
+    % Run the genetic algorithm
+    %CONSIDER ADDING MORE CONSTRAINTS
+    [optimalVars, fval] = ga(objFun, nvars, [], [], [], [], lb, ub, [], options);
+
+    % Extract the optimal angle and axis
+    optimalAngle = optimalVars(1);
+    optimalAxis = normalize([optimalVars(2) optimalVars(3) optimalVars(4)]);
+    optimalV = rotateVoxelObject(V, optimalAngle, optimalAxis, true); %plot the final optimal orientation
+end 
+
 %Voxel_to_STL: Spring
 %Input: voxel object
 %Output: STL file 
 %Convert the voxel to mesh to turn into STL
 %The isovalue is essentially the contour value or threshold that you wish to impose
-
 function YAML = Voxel_to_YAML_STL(voxel_data, file_name) 
 	% DEFINE FILE NAME
 	%file_name_yaml = file_name%.yaml';
@@ -102,37 +175,6 @@ function YAML = Voxel_to_YAML_STL(voxel_data, file_name)
 	% WRITE TO STL
 	stlwrite(fie_name_stl, mesh_data); % Export mesh to STL file
 end
-
-%YAML_paired_STL: Spring
-%Input: STL
-%Output: YMAL with FEA stuff
-%For now output the bare voxel data and the bare mesh data corresponding to the STL
-
-function [optimalAngle, optimalAxis] = optimized_rotation(V, ig)
-    %ig is initial guess. [angle, axis(1), axis(2), axis(3)]
-    %optimizing rotation to minimize space of support (do not plot the rotation)
-    objFun = @(V) space_of_support(rotatedVoxelObject(V, ig(1), [ig(2) ig(3) ig(4)], false), 135);
-
-    % Define the problem domain
-    nvars = 4; % Number of variables (x and y)
-    %NOT SURE ABOUT THESE BOUNDS
-    lb = [360 1 1 1]; % Lower bounds for x and y
-    ub = [-360 -1 -1 -1]; % Upper bounds for x and y
-
-    % Genetic algorithm options. Kind of arbitrary rn
-    options = optimoptions('ga', 'PopulationSize', 10, 'MaxGenerations', 50);
-
-    % Run the genetic algorithm
-    %CONSIDER ADDING MORE CONSTRAINTS
-    [optimalVars, fval] = ga(objFun, nvars, [], [], [], [], lb, ub, [], options);
-
-    % Extract the optimal angle and axis
-    optimalAngle = optimalVars(1);
-    optimalAxis = [optimalVars(2) optimalVars(3) optimalVars(4)];
-    optimalV = rotatedVoxelObject(V, optimalAngle, optimalAxis, true); %plot the final optimal orientation
-end 
-
-
 
 function error_voxelPlot(mat, error_mat, varargin) %June modified to plot original object with the small feature errors
 %VOXELPLOT 3D plot of voxels in a binary matrix.
@@ -204,7 +246,7 @@ num_req_input_variables = 2;
 transparency = 0.25;
 axis_tight = false;
 color_map = [1, 0, 0];    % red
-error_transparency = 1; % default to solid 
+error_transparency = 1; % darker
 %error_color = [1, 0, 0]; % default to red
 
 
@@ -285,6 +327,200 @@ if ~axis_tight
              'ZLim', [0.5, sz(3) + 0.5]);
 end
 end
+
+
+function [coordNORMALS,varargout] = COMPUTE_mesh_normals_with_vol(meshdataIN,invertYN) %modified by June to include volume under facet (to z = 0)
+% COMPUTE_mesh_normals  Calculate the normals for each facet of a triangular mesh
+%==========================================================================
+% AUTHOR        Adam H. Aitkenhead
+% CONTACT       adam.aitkenhead@physics.cr.man.ac.uk
+% INSTITUTION   The Christie NHS Foundation Trust
+% DATE          March 2010
+% PURPOSE       Calculate the normal vectors for each facet of a triangular
+%               mesh.  The ordering of the vertices
+%               (clockwise/anticlockwise) is also checked for all facets if
+%               this is requested as one of the outputs.
+%
+% USAGE         [coordNORMALS] = COMPUTE_mesh_normals(meshdataIN)
+%       ..or..  [coordNORMALS,meshdataOUT] = COMPUTE_mesh_normals(meshdataIN,invertYN)
+%
+% INPUTS
+%
+%    meshdataIN   - (structure)  Structure containing the faces and
+%                   vertices of the mesh, in the same format as that
+%                   produced by the isosurface command.
+%         ..or..  - (Nx3x3 array)  The vertex coordinates for each facet,
+%                   with:  1 row for each facet
+%                          3 columns for the x,y,z coordinates
+%                          3 pages for the three vertices
+%    invertYN     - (optional)  A flag to say whether the mesh is to be
+%                   inverted or not.  Should be 'y' or 'n'.
+%
+% OUTPUTS
+%
+%    coordNORMALS - Nx3 array   - The normal vectors for each facet, with:
+%                          1 row for each facet
+%                          3 columns for the x,y,z components
+%
+%    meshdataOUT  - (optional)  - The mesh data with the ordering of the
+%                   vertices (clockwise/anticlockwise) checked.  Uses the
+%                   same format as <meshdataIN>.
+%
+% NOTES       - Computing <meshdataOUT> to check the ordering of the
+%               vertices in each facet may be slow for large meshes.
+%             - It may not be possible to compute <meshdataOUT> for
+%               non-manifold meshes.
+%==========================================================================
+%==========================================================================
+% VERSION  USER  CHANGES
+% -------  ----  -------
+% 100331   AHA   Original version
+% 101129   AHA   Can now check the ordering of the facet vertices.
+% 101130   AHA   <meshdataIN> can now be in either of two formats.
+% 101201   AHA   Only check the vertex ordering if that is required as one
+%                of the outputs, as it can be slow for large meshes.
+% 101201   AHA   Add the flag invertYN and make it possible to invert the
+%                mesh
+% 111004   AHA   Housekeeping tidy-up
+%==========================================================================
+%======================================================
+% Read the input parameters
+%======================================================
+if isstruct(meshdataIN)==1
+  faces         = meshdataIN.faces;
+  vertex        = meshdataIN.vertices;
+  coordVERTICES = zeros(size(faces,1),3,3);
+  for loopa = 1:size(faces,1)
+    coordVERTICES(loopa,:,1) = vertex(faces(loopa,1),:);
+    coordVERTICES(loopa,:,2) = vertex(faces(loopa,2),:);
+    coordVERTICES(loopa,:,3) = vertex(faces(loopa,3),:);
+  end
+else
+  coordVERTICES = meshdataIN;
+end
+%======================================================
+% Invert the mesh if required
+%======================================================
+if exist('invertYN','var')==1 && isempty(invertYN)==0 && ischar(invertYN)==1 && ( strncmpi(invertYN,'y',1)==1 || strncmpi(invertYN,'i',1)==1 )
+  coV           = zeros(size(coordVERTICES));
+  coV(:,:,1)    = coordVERTICES(:,:,1);
+  coV(:,:,2)    = coordVERTICES(:,:,3);
+  coV(:,:,3)    = coordVERTICES(:,:,2);
+  coordVERTICES = coV;
+end
+%======================
+% Initialise array to hold the normal vectors
+%======================
+facetCOUNT   = size(coordVERTICES,1);
+coordNORMALS = zeros(facetCOUNT,4); %4 columns to add area the volume under
+%======================
+% Check the vertex ordering for each facet
+%======================
+if nargout==2
+  startfacet  = 1;
+  edgepointA  = 1;
+  checkedlist = false(facetCOUNT,1);
+  waitinglist = false(facetCOUNT,1);
+  while min(checkedlist)==0
+    
+    checkedlist(startfacet) = 1;
+    edgepointB = edgepointA + 1;
+    if edgepointB==4
+      edgepointB = 1;
+    end
+    
+    %Find points which match edgepointA
+    sameX = coordVERTICES(:,1,:)==coordVERTICES(startfacet,1,edgepointA);
+    sameY = coordVERTICES(:,2,:)==coordVERTICES(startfacet,2,edgepointA);
+    sameZ = coordVERTICES(:,3,:)==coordVERTICES(startfacet,3,edgepointA);
+    [tempa,tempb] = find(sameX & sameY & sameZ);
+    matchpointA = [tempa,tempb];
+    matchpointA = matchpointA(matchpointA(:,1)~=startfacet,:);
+  
+    %Find points which match edgepointB
+    sameX = coordVERTICES(:,1,:)==coordVERTICES(startfacet,1,edgepointB);
+    sameY = coordVERTICES(:,2,:)==coordVERTICES(startfacet,2,edgepointB);
+    sameZ = coordVERTICES(:,3,:)==coordVERTICES(startfacet,3,edgepointB);
+    [tempa,tempb] = find(sameX & sameY & sameZ);
+    matchpointB = [tempa,tempb];
+    matchpointB = matchpointB(matchpointB(:,1)~=startfacet,:);
+  
+    %Find edges which match both edgepointA and edgepointB -> giving the adjacent edge
+    [memberA,memberB] = ismember(matchpointA(:,1),matchpointB(:,1));
+    matchfacet = matchpointA(memberA,1);
+  
+    if numel(matchfacet)~=1
+      if exist('warningdone','var')==0
+        warning('Mesh is non-manifold.')
+        warningdone = 1;
+      end
+    else
+      matchpointA = matchpointA(memberA,2);
+      matchpointB = matchpointB(memberB(memberA),2);
+      
+      if checkedlist(matchfacet)==0 && waitinglist(matchfacet)==0
+        %Ensure the adjacent edge is traveled in the opposite direction to the original edge  
+        if matchpointB-matchpointA==1 || matchpointB-matchpointA==-2
+          %Direction needs to be flipped
+          [ coordVERTICES(matchfacet,:,matchpointA) , coordVERTICES(matchfacet,:,matchpointB) ] = deal( coordVERTICES(matchfacet,:,matchpointB) , coordVERTICES(matchfacet,:,matchpointA) );
+        end
+      end
+    end
+  
+    waitinglist(matchfacet) = 1;
+    
+    if edgepointA<3
+      edgepointA = edgepointA + 1;
+    elseif edgepointA==3
+      edgepointA = 1;
+      checkedlist(startfacet) = 1;
+      startfacet = find(waitinglist==1 & checkedlist==0,1,'first');
+    end
+  
+  end
+end
+%======================
+% Compute the normal vector for each facet and the volume under
+%======================
+for loopFACE = 1:facetCOUNT
+  
+  %Find the coordinates for each vertex.
+  cornerA = coordVERTICES(loopFACE,1:3,1);
+  cornerB = coordVERTICES(loopFACE,1:3,2);
+  cornerC = coordVERTICES(loopFACE,1:3,3);
+ 
+  %volume under
+  vol = volume_under_triangle(cornerA, cornerB, cornerC);
+  coordNORMALS(loopFACE,4) = vol;
+
+  %Compute the vectors AB and AC
+  AB = cornerB-cornerA;
+  AC = cornerC-cornerA;
+    
+  %Determine the cross product AB x AC
+  ABxAC = cross(AB,AC);
+    
+  %Normalise to give a unit vector
+  ABxAC = ABxAC / norm(ABxAC);
+  coordNORMALS(loopFACE,1:3) = ABxAC;
+  
+end %loopFACE
+%======================================================
+% Prepare the output parameters
+%======================================================
+if nargout==2
+  if isstruct(meshdataIN)==1
+    [faces,vertices] = CONVERT_meshformat(coordVERTICES);
+    meshdataOUT = struct('vertices',vertices,'faces',faces);
+  else
+    meshdataOUT = coordVERTICES;
+  end
+  varargout(1) = {meshdataOUT};
+end
+%======================================================
+end %function
+
+
 Functions Given
 %Existing functions we’re borrowing:
 
@@ -355,6 +591,8 @@ elseif nargin==1 && nargout==2
 end
 end %function
 %==========================================================================
+
+
 
 function [coordVERTICES,varargout] = READ_stl(stlFILENAME,varargin)
 % READ_stlascii  Read mesh data in the form of an <*.stl> file
@@ -1246,4 +1484,3 @@ end
 
 %==========================================================================
  
-
