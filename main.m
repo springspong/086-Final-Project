@@ -1,13 +1,13 @@
 
 Testing Code
 %Simple Test
-%Simple_Test = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
-%Simple_Test = double(Simple_Test);
+Simple_Test = VOXELISE(100,100,100,'SimpleTestCase.stl','xyz');
+Simple_Test = double(Simple_Test);
 %error = small_feature_detection(OUTPUTgrid,2);
-%support1 = space_of_support(OUTPUTgrid,135)
-%rotated1 = rotateVoxelObject(OUTPUTgrid, 45, [0 0 2], false);
-%rotated2 = rotateVoxelObject(rotated1, 60, [0 1 0], false);
-%support1 = space_of_support(rotated2, 135)
+support1 = space_of_support(Simple_Test,135)
+rotated1 = rotateVoxelObject(Simple_Test, 45, [0 0 2], false);
+rotated2 = rotateVoxelObject(rotated1, 60, [0 1 0], false);
+support1 = space_of_support(rotated2, 135)
 
 %Pikachu
 %Pikachu = VOXELISE(60, 47, 20,'Pikachu.STL','xyz'); %each mm is 1 voxel
@@ -15,14 +15,18 @@ Testing Code
 %voxelPlot(Pikachu);
 
 %Kirby
-Kirby = VOXELISE(36, 50, 36, 'Kirby.STL', 'xyz'); %he's 25 by 18 by 18. do each half mm is a voxel
-Kirby = double(Kirby);
-voxelPlot(Kirby, 'Color', [1 0.7 0.7]);
+%Kirby = VOXELISE(72, 120, 72, 'Kirby.STL', 'xyz'); %he's 25 by 18 by 18. so each 0.25 mm is a voxel
+%Kirby = double(Kirby);
+%voxelPlot(Kirby, 'Color', [1 0.7 0.7]);
+%error = small_feature_detection(Kirby,2); note that there's 'cropped'
+%looking parts that have errors- it's because of the low resolution and
+%very long curvature so feature alr removed by voxelization
 
 %Porcupine
-%Porcupine = VOXELISE(142, 93, 94, 'Porcupine.STL', 'xyz');
-%Porcupine = double(Porcupine);
+Porcupine = VOXELISE(94, 94, 143,'Porcupine.STL', 'xyz'); %1 mm per voxel 
+Porcupine = double(Porcupine);
 %voxelPlot(Porcupine, 'Color', [0 0 1]);
+error = small_feature_detection(Porcupine,2);
 Functions We're Writing
 %Functions we're writing/modifying 
 
@@ -80,18 +84,18 @@ end
 %Use the math from Will it Print- normal vector nf of each facet of interest (checking multiple facets). The build vector B is perp to the build plate (orthogonal to layers). 𝛉 is the angle between them, for FDM support material is needed beneath a certain facet if its 𝛉 is greater than some threshold, usually 135 degrees. Find vol under
 function support = space_of_support(V, thres_angle)
 	meshdataIN = isosurface(V); %not sure if this is correct
-	[coordNORMALS] = COMPUTE_mesh_normals(meshdataIN); %each row reps a facet, with 3 columns
+	[coordNORMALS] = COMPUTE_mesh_normals_with_vol(meshdataIN); %each row reps a facet, with 3 columns
 	build_dir = [0 0 1]; %normal vector to build plate
-	count = 1;
-	[r c] = size(coordNORMALS)
+	total_vol_under = 0;
+	[r c] = size(coordNORMALS);
 	for i = 1:r
-		norm_vector = coordNORMALS(i,:);
+		norm_vector = coordNORMALS(i,1:3);
 		theta = rad2deg(atan2(norm(cross(norm_vector,build_dir)), dot(norm_vector, build_dir))); %lin alg!
 		if theta >= thres_angle %consider negatives. 
-			count = count + 1;
+			total_vol_under = total_vol_under + coordNORMALS(i,4);
 		end 
 	end
-	support = count;
+	support = total_vol_under;
  end
 			
 %Voxel_to_STL: Spring
@@ -221,10 +225,10 @@ end
 
 % set literals
 num_req_input_variables = 2;
-transparency = 1;
+transparency = 0.25;
 axis_tight = false;
 color_map = [1, 0, 0];    % red
-error_transparency = 0.25; % darker
+error_transparency = 1; % darker
 %error_color = [1, 0, 0]; % default to red
 
 
@@ -305,79 +309,28 @@ if ~axis_tight
              'ZLim', [0.5, sz(3) + 0.5]);
 end
 end
-Functions Given
-%Existing functions we’re borrowing:
 
-%Voxelizing
-function [varargout] = CONVERT_meshformat(varargin)
-%CONVERT_meshformat  Convert mesh data from array to faces,vertices format or vice versa
-%==========================================================================
-% AUTHOR        Adam H. Aitkenhead
-% CONTACT       adam.aitkenhead@christie.nhs.uk
-% INSTITUTION   The Christie NHS Foundation Trust
-%
-% USAGE         [faces,vertices] = CONVERT_meshformat(meshXYZ)
-%         or... [meshXYZ]        = CONVERT_meshformat(faces,vertices)
-%
-% IN/OUTPUTS    meshXYZ  - Nx3x3 array - An array defining the vertex
-%                          positions for each of the N facets, with:
-%                            1 row for each facet
-%                            3 cols for the x,y,z coordinates
-%                            3 pages for the three vertices
-%
-%               vertices - Nx3 array   - A list of the x,y,z coordinates of
-%                          each vertex in the mesh.
-%
-%               faces    - Nx3 array   - A list of the vertices used in
-%                          each facet of the mesh, identified using the row
-%                          number in the array vertices.
-%==========================================================================
-%==========================================================================
-% VERSION  USER  CHANGES
-% -------  ----  -------
-% 100817   AHA   Original version
-% 111104   AHA   Housekeeping tidy-up.
-%==========================================================================
-if nargin==2 && nargout==1
- faces  = varargin{1};
- vertex = varargin{2};
- 
- meshXYZ = zeros(size(faces,1),3,3);
- for loopa = 1:size(faces,1)
-   meshXYZ(loopa,:,1) = vertex(faces(loopa,1),:);
-   meshXYZ(loopa,:,2) = vertex(faces(loopa,2),:);
-   meshXYZ(loopa,:,3) = vertex(faces(loopa,3),:);
- end
- varargout(1) = {meshXYZ};
- 
-elseif nargin==1 && nargout==2
- meshXYZ = varargin{1};
-  vertices = [meshXYZ(:,:,1);meshXYZ(:,:,2);meshXYZ(:,:,3)];
- vertices = unique(vertices,'rows');
- faces = zeros(size(meshXYZ,1),3);
- for loopF = 1:size(meshXYZ,1)
-   for loopV = 1:3
-      
-     %[C,IA,vertref] = intersect(meshXYZ(loopF,:,loopV),vertices,'rows');
-     %The following 3 lines are equivalent to the previous line, but are much faster:
+%volume_under_triangle: June
+%Input: 3 points in 3D space
+%Output: volume under those points (from z = 0)
+function [volume_under] = volume_under_triangle(corner1, corner2, corner3)
+    x1 = corner1(1);
+    x2 = corner2(1);
+    x3 = corner3(1);
+    y1 = corner1(2);
+    y2 = corner2(2);
+    y3 = corner3(2);
+    z1 = corner1(3);
+    z2 = corner2(3);
+    z3 = corner3(3);
     
-     vertref = find(vertices(:,1)==meshXYZ(loopF,1,loopV));
-     vertref = vertref(vertices(vertref,2)==meshXYZ(loopF,2,loopV));
-     vertref = vertref(vertices(vertref,3)==meshXYZ(loopF,3,loopV));
-    
-     faces(loopF,loopV) = vertref;
-    
-   end
- end
-  varargout(1) = {faces};
- varargout(2) = {vertices};
- 
+    z_avg = (z1 + z2 + z3)/3;
+    projected_area = ((x1*y2 - x2*y1) + (x2*y3 - x3*y2) + (x3*y1 - x1*y3))/2;
+    volume_under = abs(projected_area*z_avg);
 end
-end %function
-%==========================================================================
 
 
-function [coordNORMALS,varargout] = COMPUTE_mesh_normals(meshdataIN,invertYN)
+function [coordNORMALS,varargout] = COMPUTE_mesh_normals_with_vol(meshdataIN,invertYN) %modified by June to include volume under facet (to z = 0)
 % COMPUTE_mesh_normals  Calculate the normals for each facet of a triangular mesh
 %==========================================================================
 % AUTHOR        Adam H. Aitkenhead
@@ -460,7 +413,7 @@ end
 % Initialise array to hold the normal vectors
 %======================
 facetCOUNT   = size(coordVERTICES,1);
-coordNORMALS = zeros(facetCOUNT,3);
+coordNORMALS = zeros(facetCOUNT,4); %4 columns to add area the volume under
 %======================
 % Check the vertex ordering for each facet
 %======================
@@ -528,7 +481,7 @@ if nargout==2
   end
 end
 %======================
-% Compute the normal vector for each facet
+% Compute the normal vector for each facet and the volume under
 %======================
 for loopFACE = 1:facetCOUNT
   
@@ -536,7 +489,11 @@ for loopFACE = 1:facetCOUNT
   cornerA = coordVERTICES(loopFACE,1:3,1);
   cornerB = coordVERTICES(loopFACE,1:3,2);
   cornerC = coordVERTICES(loopFACE,1:3,3);
-  
+ 
+  %volume under
+  vol = volume_under_triangle(cornerA, cornerB, cornerC);
+  coordNORMALS(loopFACE,4) = vol;
+
   %Compute the vectors AB and AC
   AB = cornerB-cornerA;
   AC = cornerC-cornerA;
@@ -563,6 +520,79 @@ if nargout==2
 end
 %======================================================
 end %function
+
+
+Functions Given
+%Existing functions we’re borrowing:
+
+%Voxelizing
+function [varargout] = CONVERT_meshformat(varargin)
+%CONVERT_meshformat  Convert mesh data from array to faces,vertices format or vice versa
+%==========================================================================
+% AUTHOR        Adam H. Aitkenhead
+% CONTACT       adam.aitkenhead@christie.nhs.uk
+% INSTITUTION   The Christie NHS Foundation Trust
+%
+% USAGE         [faces,vertices] = CONVERT_meshformat(meshXYZ)
+%         or... [meshXYZ]        = CONVERT_meshformat(faces,vertices)
+%
+% IN/OUTPUTS    meshXYZ  - Nx3x3 array - An array defining the vertex
+%                          positions for each of the N facets, with:
+%                            1 row for each facet
+%                            3 cols for the x,y,z coordinates
+%                            3 pages for the three vertices
+%
+%               vertices - Nx3 array   - A list of the x,y,z coordinates of
+%                          each vertex in the mesh.
+%
+%               faces    - Nx3 array   - A list of the vertices used in
+%                          each facet of the mesh, identified using the row
+%                          number in the array vertices.
+%==========================================================================
+%==========================================================================
+% VERSION  USER  CHANGES
+% -------  ----  -------
+% 100817   AHA   Original version
+% 111104   AHA   Housekeeping tidy-up.
+%==========================================================================
+if nargin==2 && nargout==1
+ faces  = varargin{1};
+ vertex = varargin{2};
+ 
+ meshXYZ = zeros(size(faces,1),3,3);
+ for loopa = 1:size(faces,1)
+   meshXYZ(loopa,:,1) = vertex(faces(loopa,1),:);
+   meshXYZ(loopa,:,2) = vertex(faces(loopa,2),:);
+   meshXYZ(loopa,:,3) = vertex(faces(loopa,3),:);
+ end
+ varargout(1) = {meshXYZ};
+ 
+elseif nargin==1 && nargout==2
+ meshXYZ = varargin{1};
+  vertices = [meshXYZ(:,:,1);meshXYZ(:,:,2);meshXYZ(:,:,3)];
+ vertices = unique(vertices,'rows');
+ faces = zeros(size(meshXYZ,1),3);
+ for loopF = 1:size(meshXYZ,1)
+   for loopV = 1:3
+      
+     %[C,IA,vertref] = intersect(meshXYZ(loopF,:,loopV),vertices,'rows');
+     %The following 3 lines are equivalent to the previous line, but are much faster:
+    
+     vertref = find(vertices(:,1)==meshXYZ(loopF,1,loopV));
+     vertref = vertref(vertices(vertref,2)==meshXYZ(loopF,2,loopV));
+     vertref = vertref(vertices(vertref,3)==meshXYZ(loopF,3,loopV));
+    
+     faces(loopF,loopV) = vertref;
+    
+   end
+ end
+  varargout(1) = {faces};
+ varargout(2) = {vertices};
+ 
+end
+end %function
+%==========================================================================
+
 
 
 function [coordVERTICES,varargout] = READ_stl(stlFILENAME,varargin)
